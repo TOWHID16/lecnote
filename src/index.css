@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Custom Scrollbar for notes */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.7);
+}
+
+/* Interactive Word Highlight & Active Karaoke Styles */
+.word-token {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-block;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 3px;
+  margin: 1px 1px;
+}
+
+.word-token:hover {
+  background-color: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+}
+
+/* User Highlighting */
+.word-token.is-highlighted {
+  background-color: #fef08a !important; /* bright yellow */
+  color: #713f12 !important; /* dark amber text for high contrast */
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(234, 179, 8, 0.3);
+}
+
+.word-token.is-highlighted-green {
+  background-color: #bbf7d0 !important; /* soft emerald */
+  color: #14532d !important;
+  font-weight: 600;
+}
+
+/* Karaoke Active Word (currently spoken) */
+.word-token.is-active-karaoke {
+  background-color: #6366f1 !important; /* Indigo accent */
+  color: #ffffff !important;
+  font-weight: 700;
+  transform: translateY(-1px) scale(1.05);
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.8), 0 2px 4px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+
+/* Pulse animation for active recording */
+@keyframes recordingPulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 14px rgba(239, 68, 68, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.animate-rec-pulse {
+  animation: recordingPulse 2s infinite;
+}
+
+/* Print styling for PDF export */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .word-token {
+    color: #0f172a !important;
+  }
+  .word-token.is-highlighted {
+    background-color: #fef08a !important;
+    color: #713f12 !important;
+  }
+}

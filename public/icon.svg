@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="50%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#818cf8" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded rectangle -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+
+  <!-- Subtle glow ring -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="6" />
+
+  <!-- Audio Waveform Visualizer bars -->
+  <g fill="#ffffff" opacity="0.9" filter="url(#shadow)">
+    <!-- Left waves -->
+    <rect x="110" y="226" width="16" height="60" rx="8" />
+    <rect x="140" y="196" width="16" height="120" rx="8" />
+    <rect x="170" y="160" width="16" height="192" rx="8" />
+
+    <!-- Center Note / Mic silhouette -->
+    <g transform="translate(216, 126)">
+      <!-- Microphone Capsule -->
+      <rect x="16" y="20" width="48" height="96" rx="24" fill="#ffffff" />
+      <!-- Mic Arc Stand -->
+      <path d="M 0 76 C 0 120 80 120 80 76" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" />
+      <!-- Mic Stem -->
+      <line x1="40" y1="120" x2="40" y2="156" stroke="#ffffff" stroke-width="12" stroke-linecap="round" />
+      <!-- Base -->
+      <line x1="16" y1="156" x2="64" y2="156" stroke="#ffffff" stroke-width="12" stroke-linecap="round" />
+    </g>
+
+    <!-- Right waves -->
+    <rect x="326" y="160" width="16" height="192" rx="8" />
+    <rect x="356" y="196" width="16" height="120" rx="8" />
+    <rect x="386" y="226" width="16" height="60" rx="8" />
+  </g>
+
+  <!-- AI Sparkle Star -->
+  <path d="M 380 96 Q 380 130 414 130 Q 380 130 380 164 Q 380 130 346 130 Q 380 130 380 96 Z" fill="#facc15" filter="url(#shadow)" />
+  <circle cx="396" cy="168" r="6" fill="#facc15" />
+</svg>
