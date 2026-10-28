@@ -143,13 +143,13 @@ async function runMobileE2ETests() {
 
     // 8. Test Mobile Export Modal
     console.log("7. Testing Mobile Export Modal...");
-    const exportBtn = page.locator('header button[title="Share with Web Share API or download .lecnote.json/PDF"]');
+    const exportBtn = page.locator('header button[title*="Share"]').first();
     await exportBtn.click();
-    await page.waitForSelector('text=Share & Export Note', { timeout: 3000 });
+    await page.waitForSelector('text=Share Recording', { timeout: 3000 });
     console.log("✓ Export modal opened on mobile.");
 
     await page.keyboard.press('Escape');
-    await page.waitForSelector('text=Share & Export Note', { state: 'hidden', timeout: 3000 });
+    await page.waitForSelector('text=Share Recording', { state: 'hidden', timeout: 3000 });
     console.log("✓ Export modal closed.");
 
     // 9. Check Console Errors

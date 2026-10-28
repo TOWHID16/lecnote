@@ -285,13 +285,24 @@ export default function ExportModal({
           <X className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
-        <div className="flex items-center gap-2.5 sm:gap-3 mb-4 sm:mb-5">
+        <div className="flex items-center gap-2.5 sm:gap-3 mb-3 sm:mb-4">
           <div className="p-2.5 sm:p-3 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex-shrink-0">
             <Share2 className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-400" />
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-bold text-white">Share & Export Note</h2>
-            <p className="text-[11px] sm:text-xs text-slate-400">Offline-friendly portable bundles, audio, and documents</p>
+            <h2 className="text-base sm:text-lg font-bold text-white">Share Recording</h2>
+            <p className="text-[11px] sm:text-xs text-slate-400">Share or export this specific voice lecture note</p>
+          </div>
+        </div>
+
+        {/* Selected Lecture Details Badge */}
+        <div className="p-3 bg-slate-950/90 rounded-2xl border border-indigo-900/60 mb-3 sm:mb-4 flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">Selected Recording:</span>
+            <h3 className="text-sm sm:text-base font-bold text-white truncate mt-0.5">{lecture.title}</h3>
+            <p className="text-[11px] text-slate-400 truncate mt-0.5">
+              {lecture.course || 'General'} • {formatTime(lecture.duration)} • {lecture.words?.length || 0} words
+            </p>
           </div>
         </div>
 
@@ -300,9 +311,9 @@ export default function ExportModal({
           <div className="min-w-0 flex-1">
             <h4 className="text-xs sm:text-sm font-semibold text-white flex items-center gap-1.5 sm:gap-2">
               <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 flex-shrink-0" />
-              <span>One-Click Share</span>
+              <span>One-Click Share ({lecture.title})</span>
             </h4>
-            <p className="text-[11px] text-slate-300 mt-0.5 truncate">Share audio and note directly</p>
+            <p className="text-[11px] text-slate-300 mt-0.5 truncate">Send via WhatsApp, AirDrop, Telegram, etc.</p>
           </div>
           <button
             onClick={handleNativeShare}

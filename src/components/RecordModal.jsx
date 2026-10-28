@@ -21,7 +21,9 @@ export default function RecordModal({
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [selectedLanguage, setSelectedLanguage] = useState(currentLanguage || 'auto');
+  const [selectedLanguage, setSelectedLanguage] = useState(
+    currentLanguage && currentLanguage !== 'auto' ? currentLanguage : 'en-US'
+  );
   const [liveWords, setLiveWords] = useState([]);
   const [lectureTitle, setLectureTitle] = useState('');
   const [courseTag, setCourseTag] = useState('');
@@ -124,12 +126,17 @@ export default function RecordModal({
 
       // Start Web Speech Engine
       const speech = new LiveSpeechEngine({
-        language: selectedLanguage === 'auto' ? 'bn-BD' : selectedLanguage,
+        language: selectedLanguage,
         onWordsChunk: (wordsList) => {
           setLiveWords([...wordsList]);
         },
         onError: (err) => {
           console.warn("Live speech notice:", err);
+          if (err === 'network') {
+            setErrorNotice("Browser speech service unreachable (network/firewall). Audio is recording in high quality!");
+          } else if (err === 'not-allowed') {
+            setErrorNotice("Speech recognition permission denied by browser.");
+          }
         }
       });
       speechEngineRef.current = speech;
@@ -324,9 +331,9 @@ export default function RecordModal({
             </label>
             <div className="grid grid-cols-3 gap-2">
               {[
+                { id: 'en-US', label: 'English (Global)' },
+                { id: 'en-IN', label: 'Mixed Banglish' },
                 { id: 'bn-BD', label: 'বাংলা (Bangla)' },
-                { id: 'en-US', label: 'English' },
-                { id: 'auto', label: 'Mixed Banglish' },
               ].map(opt => (
                 <button
                   key={opt.id}
@@ -345,6 +352,9 @@ export default function RecordModal({
                 </button>
               ))}
             </div>
+            <p className="text-[10px] text-slate-500 mt-1">
+              Select <strong>English</strong> if speaking English words, or <strong>বাংলা</strong> if speaking pure Bangla.
+            </p>
           </div>
         </div>
 

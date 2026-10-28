@@ -51,7 +51,10 @@ export default function App() {
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [isCloudAiModalOpen, setIsCloudAiModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [shareTargetLecture, setShareTargetLecture] = useState(null);
   const [isTranscribingLecture, setIsTranscribingLecture] = useState(false);
+  const [quickTranscribeModalOpen, setQuickTranscribeModalOpen] = useState(false);
+  const [quickApiKeyInput, setQuickApiKeyInput] = useState('');
 
   // Summarizer & Cloud Settings
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
@@ -196,7 +199,7 @@ export default function App() {
     if (!activeLecture) return;
 
     if (!userSettings.groqKey) {
-      setIsCloudAiModalOpen(true);
+      setQuickTranscribeModalOpen(true);
       return;
     }
 
@@ -223,6 +226,36 @@ export default function App() {
       alert(`Transcription Error: ${err.message}`);
     } finally {
       setIsTranscribingLecture(false);
+    }
+  };
+
+  // Quick save API key and immediately transcribe active lecture
+  const handleQuickSaveKeyAndTranscribe = async () => {
+    const key = quickApiKeyInput.trim();
+    if (!key) return;
+
+    const newSettings = { ...userSettings, groqKey: key };
+    await handleSaveSettings(newSettings);
+    setQuickTranscribeModalOpen(false);
+
+    // Immediately run transcription
+    if (activeLecture && activeLecture.audioBlob && activeLecture.audioBlob.size > 0) {
+      setIsTranscribingLecture(true);
+      try {
+        const result = await transcribeWithGroqWhisper({
+          audioBlob: activeLecture.audioBlob,
+          apiKey: key,
+          language: activeLecture.language || 'auto'
+        });
+        if (result && result.words && result.words.length > 0) {
+          await handleBatchWordsUpdate(result.words);
+        }
+      } catch (err) {
+        console.error("Whisper error:", err);
+        alert(`Transcription Error: ${err.message}`);
+      } finally {
+        setIsTranscribingLecture(false);
+      }
     }
   };
 
@@ -438,8 +471,20 @@ export default function App() {
                     </p>
                   </div>
 
-                  {/* Actions: Rename & Delete */}
+                  {/* Actions: Share, Rename & Delete */}
                   <div className="flex items-center gap-1 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveLectureId(lec.id);
+                        setShareTargetLecture(lec);
+                        setIsExportModalOpen(true);
+                      }}
+                      className="p-1 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-slate-800 transition-colors"
+                      title={`Share "${lec.title}"`}
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -532,10 +577,13 @@ export default function App() {
 
           {/* Share & Export */}
           <button
-            onClick={() => setIsExportModalOpen(true)}
+            onClick={() => {
+              setShareTargetLecture(activeLecture);
+              setIsExportModalOpen(true);
+            }}
             disabled={!activeLecture}
             className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-50"
-            title="Share with Web Share API or download .lecnote.json/PDF"
+            title="Share this specific recording"
           >
             <Share2 className="w-3.5 h-3.5 text-indigo-400" />
             <span className="hidden sm:inline">Export & Share</span>
@@ -672,6 +720,16 @@ export default function App() {
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
+                        <button
+                          onClick={() => {
+                            setShareTargetLecture(activeLecture);
+                            setIsExportModalOpen(true);
+                          }}
+                          className="p-1 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-slate-800 transition-colors"
+                          title={`Share "${activeLecture.title}"`}
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                        </button>
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-indigo-400 border border-slate-700 flex-shrink-0">
                           {formatTime(activeLecture.duration)}
                         </span>
@@ -778,10 +836,81 @@ export default function App() {
       {/* Share & Export Modal */}
       <ExportModal
         isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
-        lecture={activeLecture}
+        onClose={() => {
+          setIsExportModalOpen(false);
+          setShareTargetLecture(null);
+        }}
+        lecture={shareTargetLecture || activeLecture}
         onImportBundle={handleImportBundle}
       />
+
+      {/* Quick API Key / Instant Whisper Transcription Modal */}
+      {quickTranscribeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-md bg-slate-900 border border-indigo-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col space-y-4">
+            <button
+              onClick={() => setQuickTranscribeModalOpen(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+                <Sparkles className="w-6 h-6 text-indigo-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Transcribe Note with AI</h3>
+                <p className="text-xs text-slate-400">Whisper Large v3 • 100% Free</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs text-slate-300 space-y-2">
+              <p>
+                <strong>Is an API key needed?</strong> Yes for Cloud Whisper AI, but it is <strong>100% FREE</strong> with 0 cost and no credit card required.
+              </p>
+              <a
+                href="https://console.groq.com/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 font-semibold underline"
+              >
+                <span>🔑 Click here to get a Free Groq API Key (Takes 10s)</span>
+              </a>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Paste Groq API Key (starts with <code className="text-indigo-300">gsk_...</code>):
+              </label>
+              <input
+                type="password"
+                value={quickApiKeyInput}
+                onChange={(e) => setQuickApiKeyInput(e.target.value)}
+                placeholder="gsk_..."
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setQuickTranscribeModalOpen(false)}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleQuickSaveKeyAndTranscribe}
+                disabled={!quickApiKeyInput.trim()}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 disabled:opacity-50"
+              >
+                Save & Transcribe Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
