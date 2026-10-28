@@ -30,6 +30,7 @@ export default function RecordModal({
   const [mediaStream, setMediaStream] = useState(null);
   const [errorNotice, setErrorNotice] = useState(null);
   const [isTranscribingWithAi, setIsTranscribingWithAi] = useState(false);
+  const [transcribingStatus, setTranscribingStatus] = useState('AI Transcribing...');
   const [speechApiSupported, setSpeechApiSupported] = useState(true);
 
   const mediaRecorderRef = useRef(null);
@@ -184,9 +185,10 @@ export default function RecordModal({
     const processAndSave = async (blob) => {
       let finalWords = [...capturedWords];
 
-      // If no speech words detected & user has Groq API key, run Whisper AI automatically!
+      // 1. If no speech words detected & user has Groq API key, run Cloud Whisper Large v3
       if (finalWords.length === 0 && userSettings?.groqKey && blob && blob.size > 0) {
         setIsTranscribingWithAi(true);
+        setTranscribingStatus("Transcribing with Cloud AI...");
         try {
           const whisperResult = await transcribeWithGroqWhisper({
             audioBlob: blob,
@@ -198,6 +200,29 @@ export default function RecordModal({
           }
         } catch (whisperErr) {
           console.warn("Whisper transcription fallback failed:", whisperErr);
+        } finally {
+          setIsTranscribingWithAi(false);
+        }
+      }
+
+      // 2. If still 0 words (browser speech blocked by network & zero API keys), run In-Browser AI automatically!
+      if (finalWords.length === 0 && blob && blob.size > 0) {
+        setIsTranscribingWithAi(true);
+        setTranscribingStatus("Transcribing with In-Browser AI (Zero Keys)...");
+        try {
+          const { transcribeWithLocalWhisper } = await import('../services/localWhisper');
+          const localResult = await transcribeWithLocalWhisper(blob, (progress) => {
+            if (progress.status === 'progress' && progress.progress) {
+              setTranscribingStatus(`Loading AI: ${Math.round(progress.progress)}%`);
+            } else if (progress.status === 'ready') {
+              setTranscribingStatus("Transcribing speech into words...");
+            }
+          });
+          if (localResult && localResult.words && localResult.words.length > 0) {
+            finalWords = localResult.words;
+          }
+        } catch (localErr) {
+          console.warn("In-browser AI auto-fallback notice:", localErr);
         } finally {
           setIsTranscribingWithAi(false);
         }
@@ -459,7 +484,7 @@ export default function RecordModal({
                 {isTranscribingWithAi ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>AI Transcribing...</span>
+                    <span className="truncate">{transcribingStatus}</span>
                   </>
                 ) : (
                   <>
