@@ -95,6 +95,24 @@ export async function updateLectureSummary(id, summary) {
 }
 
 /**
+ * Update lecture title and/or course metadata (for rename option)
+ */
+export async function updateLectureMetadata(id, { title, course }) {
+  const db = await getDB();
+  const tx = db.transaction(STORE_LECTURES, 'readwrite');
+  const store = tx.objectStore(STORE_LECTURES);
+  const lecture = await store.get(id);
+  if (lecture) {
+    if (title !== undefined && title.trim()) lecture.title = title.trim();
+    if (course !== undefined) lecture.course = course.trim();
+    lecture.updatedAt = new Date().toISOString();
+    await store.put(lecture);
+  }
+  await tx.done;
+  return lecture;
+}
+
+/**
  * Delete lecture
  */
 export async function deleteLecture(id) {

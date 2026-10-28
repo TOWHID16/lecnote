@@ -2,14 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Mic, Sparkles, BookOpen, Share2, Settings, Plus, Search, Trash2,
   FolderOpen, Bookmark, Radio, Volume2, Highlighter, Check, FileDown,
-  Layers, Info, RefreshCw, Menu, X
+  Layers, Info, RefreshCw, Menu, X, Edit2, Pencil
 } from 'lucide-react';
 import {
   getAllLectures, saveLecture, getLectureById, deleteLecture,
-  updateLectureWords, updateLectureSummary, getSetting, setSetting
+  updateLectureWords, updateLectureSummary, updateLectureMetadata,
+  getSetting, setSetting
 } from './services/db';
 import { createSampleLecture } from './services/sampleLecture';
 import { summarizeLecture } from './services/summarizer';
+import { transcribeWithGroqWhisper } from './services/speechRecognition';
 import { formatTime, base64ToBlob } from './services/audioUtils';
 import KaraokePlayer from './components/KaraokePlayer';
 import TranscriptView from './components/TranscriptView';
@@ -36,10 +38,20 @@ export default function App() {
   const [highlightMode, setHighlightMode] = useState(false);
   const [highlightColor, setHighlightColor] = useState('yellow'); // 'yellow' | 'green'
 
-  // Modals
+  // Renaming State
+  const [renamingLectureId, setRenamingLectureId] = useState(null);
+  const [renameTitleInput, setRenameTitleInput] = useState('');
+  const [renameCourseInput, setRenameCourseInput] = useState('');
+
+  const [isEditingHeaderTitle, setIsEditingHeaderTitle] = useState(false);
+  const [headerTitleInput, setHeaderTitleInput] = useState('');
+  const [headerCourseInput, setHeaderCourseInput] = useState('');
+
+  // Modals & Transcription
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [isCloudAiModalOpen, setIsCloudAiModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isTranscribingLecture, setIsTranscribingLecture] = useState(false);
 
   // Summarizer & Cloud Settings
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
@@ -93,6 +105,7 @@ export default function App() {
         setActiveLecture(lec);
         setCurrentTime(0);
         setActiveWord(null);
+        setIsEditingHeaderTitle(false);
       }
     }
     loadActive();
@@ -138,7 +151,82 @@ export default function App() {
     setLectures(prev => prev.map(l => l.id === activeLecture.id ? { ...l, words: updatedWords } : l));
   };
 
-  // 6. Regenerate Lecture Summary (Local or Cloud)
+  // 6. Batch update words (e.g. from AI Whisper or manual paste)
+  const handleBatchWordsUpdate = async (newWords) => {
+    if (!activeLecture) return;
+    const updatedLecture = { ...activeLecture, words: newWords };
+    setActiveLecture(updatedLecture);
+    await updateLectureWords(activeLecture.id, newWords);
+
+    setLectures(prev => prev.map(l => l.id === activeLecture.id ? { ...l, words: newWords } : l));
+
+    // Auto-generate summary from new words
+    try {
+      const summaryResult = await summarizeLecture({
+        words: newWords,
+        userSettings,
+      });
+      await updateLectureSummary(activeLecture.id, summaryResult);
+      setActiveLecture(prev => ({ ...prev, summary: summaryResult }));
+      setLectures(prev => prev.map(l => l.id === activeLecture.id ? { ...l, summary: summaryResult } : l));
+    } catch (e) {
+      console.warn("Summary generation on batch update notice:", e);
+    }
+  };
+
+  // 7. Rename lecture (title and/or course)
+  const handleRenameLecture = async (id, newTitle, newCourse) => {
+    if (!id || !newTitle?.trim()) return;
+    const title = newTitle.trim();
+    const course = newCourse ? newCourse.trim() : 'General';
+
+    await updateLectureMetadata(id, { title, course });
+
+    setLectures(prev => prev.map(l => l.id === id ? { ...l, title, course } : l));
+    if (activeLectureId === id) {
+      setActiveLecture(prev => ({ ...prev, title, course }));
+    }
+
+    setRenamingLectureId(null);
+    setIsEditingHeaderTitle(false);
+  };
+
+  // 8. Transcribe current active lecture using Groq Whisper
+  const handleTranscribeActiveLecture = async () => {
+    if (!activeLecture) return;
+
+    if (!userSettings.groqKey) {
+      setIsCloudAiModalOpen(true);
+      return;
+    }
+
+    if (!activeLecture.audioBlob || activeLecture.audioBlob.size === 0) {
+      alert("No audio stream available for this lecture note to transcribe.");
+      return;
+    }
+
+    setIsTranscribingLecture(true);
+    try {
+      const result = await transcribeWithGroqWhisper({
+        audioBlob: activeLecture.audioBlob,
+        apiKey: userSettings.groqKey,
+        language: activeLecture.language || 'auto'
+      });
+
+      if (result && result.words && result.words.length > 0) {
+        await handleBatchWordsUpdate(result.words);
+      } else {
+        alert("Whisper completed but returned 0 words. Please verify audio clarity.");
+      }
+    } catch (err) {
+      console.error("Whisper error:", err);
+      alert(`Transcription Error: ${err.message}`);
+    } finally {
+      setIsTranscribingLecture(false);
+    }
+  };
+
+  // 9. Regenerate Lecture Summary (Local or Cloud)
   const handleRegenerateSummary = async () => {
     if (!activeLecture || !activeLecture.words) return;
     setIsGeneratingSummary(true);
@@ -149,7 +237,7 @@ export default function App() {
         userSettings,
       });
 
-      const updated = await updateLectureSummary(activeLecture.id, summaryResult);
+      await updateLectureSummary(activeLecture.id, summaryResult);
       setActiveLecture(prev => ({ ...prev, summary: summaryResult }));
       setLectures(prev => prev.map(l => l.id === activeLecture.id ? { ...l, summary: summaryResult } : l));
     } catch (err) {
@@ -159,7 +247,7 @@ export default function App() {
     }
   };
 
-  // 7. Save a newly recorded lecture
+  // 10. Save a newly recorded lecture
   const handleSaveRecordedLecture = async (newLectureData) => {
     // Generate initial summary automatically
     const summary = await summarizeLecture({
@@ -180,7 +268,7 @@ export default function App() {
     setActiveLecture(saved);
   };
 
-  // 8. Delete active lecture
+  // 11. Delete active lecture
   const handleDeleteLecture = async (id, e) => {
     e.stopPropagation();
     if (!window.confirm("Are you sure you want to delete this lecture note?")) return;
@@ -199,7 +287,7 @@ export default function App() {
     }
   };
 
-  // 9. Load / Reset Sample Lecture
+  // 12. Load / Reset Sample Lecture
   const handleLoadSampleLecture = async () => {
     const sample = createSampleLecture();
     sample.id = `sample-${Date.now()}`;
@@ -209,7 +297,7 @@ export default function App() {
     setActiveLecture(sample);
   };
 
-  // 10. Import Bundle (.lecnote.json)
+  // 13. Import Bundle (.lecnote.json)
   const handleImportBundle = async (importedData) => {
     let blob = null;
     if (importedData.audioBase64) {
@@ -231,7 +319,7 @@ export default function App() {
     setActiveLecture(saved);
   };
 
-  // 11. Save Cloud Settings
+  // 14. Save Cloud Settings
   const handleSaveSettings = async (newSettings) => {
     setUserSettings(newSettings);
     await setSetting('groqKey', newSettings.groqKey);
@@ -273,7 +361,7 @@ export default function App() {
         </button>
       </div>
 
-      {/* Lectures List */}
+      {/* Lectures List with Rename and Delete */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
         {filteredLectures.length === 0 ? (
           <div className="text-center py-8 text-xs text-slate-500">
@@ -282,7 +370,50 @@ export default function App() {
         ) : (
           filteredLectures.map((lec) => {
             const isActive = lec.id === activeLectureId;
+            const isRenaming = renamingLectureId === lec.id;
             const highlightWordsCount = lec.words?.filter(w => w.isHighlighted)?.length || 0;
+
+            if (isRenaming) {
+              return (
+                <div
+                  key={lec.id}
+                  className="p-3 rounded-2xl bg-slate-900 border border-indigo-500/80 shadow-lg space-y-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="space-y-1.5">
+                    <input
+                      type="text"
+                      value={renameTitleInput}
+                      onChange={(e) => setRenameTitleInput(e.target.value)}
+                      placeholder="Lecture Title"
+                      className="w-full bg-slate-800 border border-slate-700 text-xs rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-indigo-500"
+                      autoFocus
+                    />
+                    <input
+                      type="text"
+                      value={renameCourseInput}
+                      onChange={(e) => setRenameCourseInput(e.target.value)}
+                      placeholder="Course / Tag (e.g. CSE 207)"
+                      className="w-full bg-slate-800 border border-slate-700 text-[11px] rounded-lg px-2.5 py-1 text-slate-300 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-1.5 pt-1">
+                    <button
+                      onClick={() => setRenamingLectureId(null)}
+                      className="px-2.5 py-1 text-[11px] rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleRenameLecture(lec.id, renameTitleInput, renameCourseInput)}
+                      className="px-3 py-1 text-[11px] rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <div
@@ -307,14 +438,28 @@ export default function App() {
                     </p>
                   </div>
 
-                  {/* Delete button */}
-                  <button
-                    onClick={(e) => handleDeleteLecture(lec.id, e)}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition-all"
-                    title="Delete note"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Actions: Rename & Delete */}
+                  <div className="flex items-center gap-1 opacity-80 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenamingLectureId(lec.id);
+                        setRenameTitleInput(lec.title);
+                        setRenameCourseInput(lec.course || 'General');
+                      }}
+                      className="p-1 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-slate-800 transition-colors"
+                      title="Rename lecture"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteLecture(lec.id, e)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                      title="Delete note"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Metadata Footer */}
@@ -468,17 +613,74 @@ export default function App() {
               {/* Lecture Header & Tabs */}
               <div className="px-3 sm:px-6 pt-3 sm:pt-4 pb-2.5 sm:pb-3 border-b border-slate-800 bg-slate-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 flex-shrink-0">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm sm:text-base md:text-lg font-bold text-white tracking-tight truncate">
-                      {activeLecture.title}
-                    </h2>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-indigo-400 border border-slate-700 flex-shrink-0">
-                      {formatTime(activeLecture.duration)}
-                    </span>
-                  </div>
-                  <p className="text-[11px] sm:text-xs text-slate-400 truncate mt-0.5">
-                    {activeLecture.course} • {activeLecture.language === 'auto' ? 'Mixed Banglish' : activeLecture.language}
-                  </p>
+                  {isEditingHeaderTitle ? (
+                    /* Inline Rename Form in Header */
+                    <div className="flex flex-wrap items-center gap-2 py-1">
+                      <input
+                        type="text"
+                        value={headerTitleInput}
+                        onChange={(e) => setHeaderTitleInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameLecture(activeLecture.id, headerTitleInput, headerCourseInput);
+                          if (e.key === 'Escape') setIsEditingHeaderTitle(false);
+                        }}
+                        placeholder="Lecture Title"
+                        className="bg-slate-800 border border-indigo-500 text-white text-xs sm:text-sm font-semibold rounded-lg px-2.5 py-1 focus:outline-none"
+                        autoFocus
+                      />
+                      <input
+                        type="text"
+                        value={headerCourseInput}
+                        onChange={(e) => setHeaderCourseInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameLecture(activeLecture.id, headerTitleInput, headerCourseInput);
+                          if (e.key === 'Escape') setIsEditingHeaderTitle(false);
+                        }}
+                        placeholder="Course/Tag"
+                        className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1 w-24 sm:w-28 focus:outline-none focus:border-indigo-500"
+                      />
+                      <button
+                        onClick={() => handleRenameLecture(activeLecture.id, headerTitleInput, headerCourseInput)}
+                        className="p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs"
+                        title="Save Title"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setIsEditingHeaderTitle(false)}
+                        className="p-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-xs"
+                        title="Cancel"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    /* Normal Display with 1-Click Rename Pencil */
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm sm:text-base md:text-lg font-bold text-white tracking-tight truncate">
+                          {activeLecture.title}
+                        </h2>
+                        <button
+                          onClick={() => {
+                            setHeaderTitleInput(activeLecture.title);
+                            setHeaderCourseInput(activeLecture.course || 'General');
+                            setIsEditingHeaderTitle(true);
+                          }}
+                          className="p-1 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-slate-800 transition-colors"
+                          title="Rename this lecture"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-indigo-400 border border-slate-700 flex-shrink-0">
+                          {formatTime(activeLecture.duration)}
+                        </span>
+                      </div>
+                      <p className="text-[11px] sm:text-xs text-slate-400 truncate mt-0.5">
+                        {activeLecture.course} • {activeLecture.language === 'auto' ? 'Mixed Banglish' : activeLecture.language}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* View Tabs: Segmented Control */}
@@ -515,12 +717,17 @@ export default function App() {
                   <TranscriptView
                     words={activeLecture.words || []}
                     currentTime={currentTime}
+                    duration={activeLecture.duration}
                     onWordClick={handleWordClick}
                     onWordUpdate={handleWordUpdate}
+                    onBatchWordsUpdate={handleBatchWordsUpdate}
                     highlightMode={highlightMode}
                     highlightColor={highlightColor}
                     setHighlightMode={setHighlightMode}
                     setHighlightColor={setHighlightColor}
+                    onTranscribe={handleTranscribeActiveLecture}
+                    isTranscribing={isTranscribingLecture}
+                    hasAudio={!!activeLecture.audioBlob}
                   />
                 ) : (
                   <SummaryView
@@ -557,6 +764,7 @@ export default function App() {
         onClose={() => setIsRecordModalOpen(false)}
         onSaveLecture={handleSaveRecordedLecture}
         currentLanguage="auto"
+        userSettings={userSettings}
       />
 
       {/* Cloud AI Boost Settings Modal */}

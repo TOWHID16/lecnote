@@ -1,24 +1,34 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Pause, Play, Square, X, Radio, Languages, Sparkles, Volume2 } from 'lucide-react';
+import {
+  Mic, Pause, Play, Square, X, Radio, Languages, Sparkles, Volume2,
+  Tag, Edit3, Loader2, CheckCircle2, AlertCircle
+} from 'lucide-react';
 import AudioWaveform from './AudioWaveform';
-import { LiveSpeechEngine } from '../services/speechRecognition';
+import { LiveSpeechEngine, transcribeWithGroqWhisper } from '../services/speechRecognition';
 import { formatTime } from '../services/audioUtils';
+
+const QUICK_SUBJECT_TAGS = [
+  'CSE', 'Physics', 'Bangla', 'English', 'Math', 'Biology', 'Chemistry', 'General'
+];
 
 export default function RecordModal({
   isOpen,
   onClose,
   onSaveLecture,
-  currentLanguage = 'bn-BD',
+  currentLanguage = 'auto',
+  userSettings = {}
 }) {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [selectedLanguage, setSelectedLanguage] = useState(currentLanguage || 'bn-BD');
+  const [selectedLanguage, setSelectedLanguage] = useState(currentLanguage || 'auto');
   const [liveWords, setLiveWords] = useState([]);
   const [lectureTitle, setLectureTitle] = useState('');
-  const [courseTag, setCourseTag] = useState('General Lecture');
+  const [courseTag, setCourseTag] = useState('');
   const [mediaStream, setMediaStream] = useState(null);
   const [errorNotice, setErrorNotice] = useState(null);
+  const [isTranscribingWithAi, setIsTranscribingWithAi] = useState(false);
+  const [speechApiSupported, setSpeechApiSupported] = useState(true);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -37,12 +47,21 @@ export default function RecordModal({
   useEffect(() => {
     if (isOpen) {
       const now = new Date();
-      setLectureTitle(`Lecture ${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+      const dateStr = now.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      setLectureTitle(`Lecture - ${dateStr} ${timeStr}`);
+      setCourseTag('General');
       setLiveWords([]);
       setRecordingSeconds(0);
       setIsRecording(false);
       setIsPaused(false);
       setErrorNotice(null);
+      setIsTranscribingWithAi(false);
+
+      const hasSpeech = typeof window !== 'undefined' &&
+        !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      setSpeechApiSupported(hasSpeech);
     } else {
       stopRecordingCleanup();
     }
@@ -105,7 +124,7 @@ export default function RecordModal({
 
       // Start Web Speech Engine
       const speech = new LiveSpeechEngine({
-        language: selectedLanguage,
+        language: selectedLanguage === 'auto' ? 'bn-BD' : selectedLanguage,
         onWordsChunk: (wordsList) => {
           setLiveWords([...wordsList]);
         },
@@ -117,8 +136,8 @@ export default function RecordModal({
       speech.start(0);
 
     } catch (err) {
-      console.warn("Microphone access error or simulated environment:", err);
-      setErrorNotice("Microphone unavailable or blocked. You can still test with simulated audio or load sample lecture.");
+      console.warn("Microphone access error:", err);
+      setErrorNotice("Microphone unavailable or blocked. Please allow mic permissions in your browser.");
     }
   };
 
@@ -145,27 +164,62 @@ export default function RecordModal({
     }
   };
 
-  const stopAndSave = () => {
+  const stopAndSave = async () => {
     const recorder = mediaRecorderRef.current;
-    const finalSeconds = recordingSeconds || 1;
+    const finalSeconds = Math.max(1, recordingSeconds);
 
-    // Helper to finish saving
-    const finalize = (blob) => {
-      // If no words were detected from silence, generate placeholder phrase
-      const finalWords = liveWords.length > 0 ? liveWords : [
-        {
-          id: `w-${Date.now()}`,
-          word: "Recorded Voice Note",
-          startTime: 0,
-          endTime: Math.max(1, finalSeconds),
-          isHighlighted: false,
-          highlightColor: 'yellow'
+    // Stop speech engine and get latest words
+    let capturedWords = speechEngineRef.current?.stop() || [];
+    if (capturedWords.length === 0 && liveWords.length > 0) {
+      capturedWords = [...liveWords];
+    }
+
+    const processAndSave = async (blob) => {
+      let finalWords = [...capturedWords];
+
+      // If no speech words detected & user has Groq API key, run Whisper AI automatically!
+      if (finalWords.length === 0 && userSettings?.groqKey && blob && blob.size > 0) {
+        setIsTranscribingWithAi(true);
+        try {
+          const whisperResult = await transcribeWithGroqWhisper({
+            audioBlob: blob,
+            apiKey: userSettings.groqKey,
+            language: selectedLanguage
+          });
+          if (whisperResult && whisperResult.words && whisperResult.words.length > 0) {
+            finalWords = whisperResult.words;
+          }
+        } catch (whisperErr) {
+          console.warn("Whisper transcription fallback failed:", whisperErr);
+        } finally {
+          setIsTranscribingWithAi(false);
         }
-      ];
+      }
+
+      // If still 0 words (offline or speech API unsupported), generate interactive time-sliced phrase blocks
+      // so user can seek, tap, highlight, and type words at exact timestamps!
+      if (finalWords.length === 0) {
+        const segmentDuration = 4; // every 4 seconds
+        const count = Math.max(1, Math.ceil(finalSeconds / segmentDuration));
+        finalWords = [];
+
+        for (let i = 0; i < count; i++) {
+          const start = i * segmentDuration;
+          const end = Math.min(finalSeconds, (i + 1) * segmentDuration);
+          finalWords.push({
+            id: `seg-${i}-${Date.now()}`,
+            word: `[Speech ${formatTime(start)}]`,
+            startTime: parseFloat(start.toFixed(2)),
+            endTime: parseFloat(end.toFixed(2)),
+            isHighlighted: false,
+            highlightColor: 'yellow'
+          });
+        }
+      }
 
       const newLecture = {
         id: `lecture-${Date.now()}`,
-        title: lectureTitle.trim() || 'Untitled Lecture Note',
+        title: lectureTitle.trim() || `Lecture - ${new Date().toLocaleDateString()}`,
         course: courseTag.trim() || 'General',
         duration: finalSeconds,
         language: selectedLanguage,
@@ -184,12 +238,11 @@ export default function RecordModal({
       recorder.onstop = () => {
         const mime = recorder.mimeType || 'audio/webm';
         const audioBlob = new Blob(audioChunksRef.current, { type: mime });
-        finalize(audioBlob);
+        processAndSave(audioBlob);
       };
       recorder.stop();
     } else {
-      // Fallback empty or tone blob
-      finalize(new Blob([], { type: 'audio/webm' }));
+      processAndSave(new Blob([], { type: 'audio/webm' }));
     }
   };
 
@@ -201,14 +254,15 @@ export default function RecordModal({
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 sm:top-5 right-4 sm:right-5 p-2 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+          disabled={isTranscribingWithAi}
+          className="absolute top-4 sm:top-5 right-4 sm:right-5 p-2 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
         >
           <X className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
         {/* Header */}
         <div className="flex items-center gap-2.5 sm:gap-3 mb-4 sm:mb-5">
-          <div className="p-2.5 sm:p-3 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex-shrink-0">
+          <div className="p-2.5 sm:p-3 rounded-2xl bg-rose-600/20 text-rose-400 border border-rose-500/30 flex-shrink-0">
             <Radio className={`w-5 h-5 sm:w-6 sm:h-6 ${isRecording && !isPaused ? 'animate-pulse text-rose-500' : ''}`} />
           </div>
           <div>
@@ -217,110 +271,192 @@ export default function RecordModal({
           </div>
         </div>
 
-        {/* Inputs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        {/* Name & Subject Inputs (Prominent to avoid stacking unnamed recordings) */}
+        <div className="space-y-3 mb-4 p-3.5 bg-slate-950/60 rounded-2xl border border-slate-800/80">
           <div>
-            <label className="block text-[11px] font-semibold uppercase text-slate-400 mb-1">Lecture Title</label>
+            <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
+              Lecture Title / Topic
+            </label>
             <input
               type="text"
               value={lectureTitle}
               onChange={(e) => setLectureTitle(e.target.value)}
-              placeholder="e.g. AI Ethics & Algorithms"
-              className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              placeholder="e.g. CSE 207 - Binary Search Trees, Physics - Waves"
+              className="w-full bg-slate-900 border border-slate-700 text-sm rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold uppercase text-slate-400 mb-1">Language Mode</label>
-            <select
-              value={selectedLanguage}
-              onChange={(e) => {
-                setSelectedLanguage(e.target.value);
-                speechEngineRef.current?.setLanguage(e.target.value);
-              }}
-              className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="bn-BD">Bangla (বাংলা - bn-BD)</option>
-              <option value="en-US">English (en-US)</option>
-              <option value="auto">Banglish / Auto Detect</option>
-            </select>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+                Course / Subject Tag
+              </label>
+              <div className="flex items-center gap-1 overflow-x-auto max-w-[200px] sm:max-w-none">
+                {QUICK_SUBJECT_TAGS.slice(0, 5).map(tag => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setCourseTag(tag)}
+                    className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                      courseTag === tag
+                        ? 'bg-indigo-600 text-white border-indigo-500'
+                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <input
+              type="text"
+              value={courseTag}
+              onChange={(e) => setCourseTag(e.target.value)}
+              placeholder="e.g. CSE 207, PHY 101, Bangla"
+              className="w-full bg-slate-900 border border-slate-700 text-xs rounded-xl px-3 py-1.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+            />
+          </div>
+
+          {/* Language Selection */}
+          <div className="pt-1">
+            <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+              Speech Recognition Language
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: 'bn-BD', label: 'বাংলা (Bangla)' },
+                { id: 'en-US', label: 'English' },
+                { id: 'auto', label: 'Mixed Banglish' },
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedLanguage(opt.id);
+                    speechEngineRef.current?.setLanguage(opt.id);
+                  }}
+                  className={`py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all ${
+                    selectedLanguage === opt.id
+                      ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500 shadow-sm'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Waveform & Timer Visualizer */}
-        <div className="my-2 space-y-3">
+        {/* Status Notice if Speech API is limited */}
+        {!speechApiSupported && (
+          <div className="mb-3 p-2.5 bg-amber-950/40 border border-amber-800/60 rounded-xl text-[11px] text-amber-300 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-400 mt-0.5" />
+            <span>
+              Web Speech API is not natively supported in this browser. Don't worry! Your audio will record crystal clear, and you can transcribe it using Free Cloud AI or sync manual notes.
+            </span>
+          </div>
+        )}
+
+        {/* Live Audio Waveform & Timer */}
+        <div className="my-2 bg-slate-950 rounded-2xl border border-slate-800 p-4 flex flex-col items-center">
           <AudioWaveform
             stream={mediaStream}
             isRecording={isRecording && !isPaused}
-            height={80}
-            barColor="#6366f1"
-            accentColor="#ec4899"
+            height={70}
           />
 
-          <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-2">
-              <span className={`w-3 h-3 rounded-full ${
-                !isRecording ? 'bg-slate-600' : (isPaused ? 'bg-amber-400' : 'bg-rose-500 animate-rec-pulse')
-              }`} />
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                {!isRecording ? 'Ready' : (isPaused ? 'Paused' : 'Recording Live')}
-              </span>
-            </div>
-            <div className="font-mono text-2xl font-bold text-slate-100 tracking-wider">
+          {/* Big Digital Timer */}
+          <div className="mt-3 flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${isRecording && !isPaused ? 'bg-rose-500 animate-ping' : isPaused ? 'bg-amber-400' : 'bg-slate-600'}`} />
+            <span className="text-2xl sm:text-3xl font-mono font-bold text-white tracking-wider">
               {formatTime(recordingSeconds)}
-            </div>
+            </span>
           </div>
+
+          <p className="text-[11px] text-slate-500 mt-1">
+            {isRecording ? (isPaused ? 'Recording Paused' : 'Listening & Recording Audio...') : 'Ready to record lecture'}
+          </p>
         </div>
 
-        {/* Live Transcript Preview Box */}
-        <div className="flex-1 min-h-[100px] max-h-[160px] my-3 p-3 bg-slate-950/70 rounded-xl border border-slate-800/80 overflow-y-auto text-sm text-slate-300 font-sans">
-          {liveWords.length === 0 ? (
-            <span className="text-xs text-slate-500 italic flex items-center justify-center h-full">
-              {isRecording ? "Listening... Speak into your microphone" : "Press Start Recording to begin live speech note-taking"}
+        {/* Live Transcription Preview Area (Critical user feedback!) */}
+        <div className="mb-4 p-3 bg-slate-950/80 rounded-xl border border-slate-800/80 flex flex-col min-h-[75px] max-h-36 overflow-y-auto">
+          <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold mb-1 border-b border-slate-800 pb-1">
+            <span className="flex items-center gap-1.5 text-indigo-400">
+              <Sparkles className="w-3.5 h-3.5" />
+              Live Spoken Words Stream
             </span>
+            <span className="font-mono text-slate-500">
+              {liveWords.length} words
+            </span>
+          </div>
+          
+          {liveWords.length === 0 ? (
+            <p className="text-xs text-slate-600 italic py-2 text-center">
+              {isRecording
+                ? "🎙️ Speak clearly into your mic... words will appear here in real-time."
+                : "Spoken transcription will stream here during recording."}
+            </p>
           ) : (
-            <p className="leading-relaxed">
-              {liveWords.map((w, idx) => (
-                <span key={idx} className="mr-1 text-slate-200">
+            <div className="flex flex-wrap gap-1 py-1">
+              {liveWords.map((w) => (
+                <span
+                  key={w.id}
+                  className="text-xs bg-indigo-950/60 text-indigo-200 border border-indigo-800/50 px-1.5 py-0.5 rounded"
+                >
                   {w.word}
                 </span>
               ))}
-            </p>
+            </div>
           )}
         </div>
 
+        {/* Error message if any */}
         {errorNotice && (
-          <div className="text-xs text-amber-300 bg-amber-950/40 border border-amber-800 rounded-lg p-2 mb-3">
+          <div className="mb-3 p-2 bg-rose-950/50 border border-rose-800 text-rose-300 text-xs rounded-xl">
             {errorNotice}
           </div>
         )}
 
-        {/* Action Controls */}
-        <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
+        {/* Controls */}
+        <div className="flex items-center justify-center gap-3 pt-1">
           {!isRecording ? (
             <button
               onClick={startRecording}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-lg shadow-rose-600/30 ring-2 ring-rose-400/40"
+              className="w-full py-3 px-6 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm shadow-lg shadow-rose-600/30 flex items-center justify-center gap-2 transition-transform active:scale-95"
             >
               <Mic className="w-5 h-5 fill-current" />
               <span>Start Recording Lecture</span>
             </button>
           ) : (
             <>
+              {/* Pause / Resume */}
               <button
                 onClick={togglePauseResume}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
+                disabled={isTranscribingWithAi}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
               >
-                {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                {isPaused ? <Play className="w-4 h-4 fill-current text-emerald-400" /> : <Pause className="w-4 h-4 text-amber-400" />}
                 <span>{isPaused ? 'Resume' : 'Pause'}</span>
               </button>
 
+              {/* Stop & Save */}
               <button
                 onClick={stopAndSave}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md shadow-emerald-600/30"
+                disabled={isTranscribingWithAi}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
               >
-                <Square className="w-4 h-4 fill-current" />
-                <span>Stop & Save Note</span>
+                {isTranscribingWithAi ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>AI Transcribing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Square className="w-4 h-4 fill-current text-white" />
+                    <span>Stop & Save Note</span>
+                  </>
+                )}
               </button>
             </>
           )}

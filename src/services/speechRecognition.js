@@ -13,17 +13,21 @@ export class LiveSpeechEngine {
     this.recognition = null;
     this.isListening = false;
     this.audioStartTime = 0;
-    this.lastProcessedWordCount = 0;
-    this.allAccumulatedWords = [];
+    this.systemStartTime = 0;
     this.phraseStartTime = 0;
+    this.allAccumulatedWords = [];
+    this.latestInterimWords = [];
 
     this.initRecognition();
   }
 
   initRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognition = typeof window !== 'undefined'
+      ? (window.SpeechRecognition || window.webkitSpeechRecognition)
+      : null;
+
     if (!SpeechRecognition) {
-      console.warn("Web Speech API not supported in this browser. Falling back to manual or audio-only mode.");
+      console.warn("Web Speech API not supported in this browser. Falling back to Whisper AI or audio recording mode.");
       return;
     }
 
@@ -51,7 +55,7 @@ export class LiveSpeechEngine {
       };
 
       this.recognition.onend = () => {
-        // Auto-restart if still flagged listening (browsers stop speech recognition on silence)
+        // Auto-restart if user has not hit stop (mobile/browsers stop speech recognition on silence)
         if (this.isListening) {
           try {
             this.recognition.start();
@@ -76,10 +80,11 @@ export class LiveSpeechEngine {
 
   start(currentTimeSeconds = 0) {
     this.isListening = true;
-    this.audioStartTime = currentTimeSeconds;
-    this.phraseStartTime = currentTimeSeconds;
-    this.lastProcessedWordCount = 0;
+    this.systemStartTime = performance.now();
+    this.audioStartTime = Number(currentTimeSeconds) || 0;
+    this.phraseStartTime = this.audioStartTime;
     this.allAccumulatedWords = [];
+    this.latestInterimWords = [];
 
     if (this.recognition) {
       try {
@@ -99,68 +104,88 @@ export class LiveSpeechEngine {
         // Ignored
       }
     }
+    // Return all words captured up to this point
+    return this.getWords();
+  }
+
+  getWords() {
+    if (this.latestInterimWords.length > 0) {
+      return [...this.latestInterimWords];
+    }
+    return [...this.allAccumulatedWords];
   }
 
   /**
    * Smart Syllable-Weighted Word Timestamp Alignment
-   * Distributes the spoken phrase duration proportionally to each word's length,
-   * producing realistic word-level start & end times.
+   * Accurately maps spoken words into timestamps even with pauses.
    */
   handleSpeechResult(event) {
-    let fullTranscript = '';
-    let isFinal = false;
+    if (!event.results) return;
 
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
-      fullTranscript += event.results[i][0].transcript;
-      if (event.results[i].isFinal) {
-        isFinal = true;
+    let finalWordsText = '';
+    let interimWordsText = '';
+
+    for (let i = 0; i < event.results.length; ++i) {
+      const res = event.results[i];
+      if (res.isFinal) {
+        finalWordsText += res[0].transcript + ' ';
+      } else {
+        interimWordsText += res[0].transcript + ' ';
       }
     }
 
-    const rawWords = fullTranscript.trim().split(/\s+/).filter(Boolean);
+    const fullText = (finalWordsText + ' ' + interimWordsText).trim();
+    const rawWords = fullText.split(/\s+/).filter(Boolean);
     if (rawWords.length === 0) return;
 
-    const currentAudioTime = (performance.now() - this.systemStartTime) / 1000 + this.audioStartTime;
-    const chunkDuration = Math.max(0.6, currentAudioTime - this.phraseStartTime);
+    const now = performance.now();
+    const elapsed = this.systemStartTime ? (now - this.systemStartTime) / 1000 : 0;
+    const currentAudioTime = Math.max(0.5, elapsed + this.audioStartTime);
+    const chunkDuration = Math.max(0.4, currentAudioTime - this.phraseStartTime);
 
     // Compute relative character/syllable weight for each word
     const totalChars = rawWords.reduce((sum, w) => sum + Math.max(2, w.length), 0);
     let cumulativeTime = this.phraseStartTime;
 
     const wordObjects = rawWords.map((wordStr, index) => {
-      const weight = Math.max(2, wordStr.length) / totalChars;
-      const wordDuration = Math.max(0.25, chunkDuration * weight);
+      const weight = Math.max(2, wordStr.length) / (totalChars || 1);
+      const wordDuration = Math.max(0.2, chunkDuration * weight);
       const start = cumulativeTime;
       const end = cumulativeTime + wordDuration;
       cumulativeTime = end;
 
       return {
-        id: `word-${this.allAccumulatedWords.length + index}-${Date.now()}`,
+        id: `word-${index}-${Date.now()}`,
         word: wordStr,
-        startTime: parseFloat(start.toFixed(2)),
-        endTime: parseFloat(end.toFixed(2)),
+        startTime: parseFloat(Number(start).toFixed(2)),
+        endTime: parseFloat(Number(end).toFixed(2)),
         isHighlighted: false,
         highlightColor: 'yellow'
       };
     });
 
-    if (isFinal) {
-      this.allAccumulatedWords.push(...wordObjects);
+    this.latestInterimWords = wordObjects;
+    this.onWordsChunk?.(wordObjects, false);
+
+    // If latest result was final, lock in chunk boundary
+    const lastResult = event.results[event.results.length - 1];
+    if (lastResult && lastResult.isFinal) {
+      this.allAccumulatedWords = wordObjects;
       this.phraseStartTime = currentAudioTime;
-      this.onWordsChunk?.(this.allAccumulatedWords, true);
-    } else {
-      // Stream interim words
-      const interimList = [...this.allAccumulatedWords, ...wordObjects];
-      this.onWordsChunk?.(interimList, false);
+      this.onWordsChunk?.(wordObjects, true);
     }
   }
 }
 
 /**
  * Transcribe Audio Blob using Groq Whisper Large v3 (Word-Level Timestamps)
- * Used when user triggers Cloud AI Boost for Whisper accuracy
+ * Used when user triggers Cloud AI Boost or automatic Whisper transcription
  */
 export async function transcribeWithGroqWhisper({ audioBlob, apiKey, language = 'auto' }) {
+  if (!apiKey) {
+    throw new Error("No Groq API Key provided for Whisper transcription.");
+  }
+
   const formData = new FormData();
   formData.append('file', audioBlob, 'lecture.webm');
   formData.append('model', 'whisper-large-v3');
@@ -168,7 +193,6 @@ export async function transcribeWithGroqWhisper({ audioBlob, apiKey, language = 
   formData.append('timestamp_granularities[]', 'word');
 
   if (language && language !== 'auto') {
-    // Groq whisper expects 2-letter ISO code: bn or en
     const isoLang = language.split('-')[0];
     formData.append('language', isoLang);
   }
@@ -192,15 +216,22 @@ export async function transcribeWithGroqWhisper({ audioBlob, apiKey, language = 
   const words = (data.words || []).map((item, idx) => ({
     id: `whisper-${idx}-${Date.now()}`,
     word: item.word.trim(),
-    startTime: parseFloat(item.start.toFixed(2)),
-    endTime: parseFloat(item.end.toFixed(2)),
+    startTime: parseFloat(Number(item.start).toFixed(2)),
+    endTime: parseFloat(Number(item.end).toFixed(2)),
     isHighlighted: false,
     highlightColor: 'yellow'
   }));
 
   return {
     text: data.text,
-    words: words,
+    words: words.length > 0 ? words : (data.text ? data.text.split(/\s+/).map((w, i) => ({
+      id: `whisper-w-${i}-${Date.now()}`,
+      word: w,
+      startTime: parseFloat((i * 0.4).toFixed(2)),
+      endTime: parseFloat(((i + 1) * 0.4).toFixed(2)),
+      isHighlighted: false,
+      highlightColor: 'yellow'
+    })) : []),
     duration: data.duration
   };
 }

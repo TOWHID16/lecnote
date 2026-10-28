@@ -168,7 +168,7 @@ async function runE2ETests() {
     console.log("✓ Recording Studio opened.");
 
     // Fill title
-    const titleInput = page.locator('input[placeholder="e.g. AI Ethics & Algorithms"]');
+    const titleInput = page.locator('input[placeholder*="Physics - Waves"]');
     await titleInput.fill('Live Test Lecture (Banglish AI)');
 
     // Click Start Recording
