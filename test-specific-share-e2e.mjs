@@ -48,8 +48,8 @@ async function testSpecificShare() {
     const transcribeBtn = page.locator('button[title*="AI Whisper Transcription"]').first();
     if (await transcribeBtn.isVisible()) {
       await transcribeBtn.click();
-      await page.waitForSelector('text=Transcribe Note with AI', { timeout: 3000 });
-      console.log("✓ Quick Transcribe Modal opened explaining Free Groq Whisper AI!");
+      await page.waitForSelector('text=Option 1: 100% Free In-Browser AI', { timeout: 3000 });
+      console.log("✓ Quick Transcribe Modal opened with Zero-Key Local AI & Cloud options!");
       await page.keyboard.press('Escape');
     }
 

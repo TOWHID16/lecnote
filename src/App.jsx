@@ -55,6 +55,8 @@ export default function App() {
   const [isTranscribingLecture, setIsTranscribingLecture] = useState(false);
   const [quickTranscribeModalOpen, setQuickTranscribeModalOpen] = useState(false);
   const [quickApiKeyInput, setQuickApiKeyInput] = useState('');
+  const [localWhisperLoading, setLocalWhisperLoading] = useState(false);
+  const [localWhisperProgress, setLocalWhisperProgress] = useState(null);
 
   // Summarizer & Cloud Settings
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
@@ -256,6 +258,41 @@ export default function App() {
       } finally {
         setIsTranscribingLecture(false);
       }
+    }
+  };
+
+  // Run 100% Free Local In-Browser AI Whisper (Zero Keys)
+  const handleRunLocalWhisper = async () => {
+    if (!activeLecture || !activeLecture.audioBlob || activeLecture.audioBlob.size === 0) {
+      alert("No recorded audio found for this lecture to transcribe.");
+      return;
+    }
+
+    setLocalWhisperLoading(true);
+    setLocalWhisperProgress("Preparing in-browser AI model (0 cost, zero keys)...");
+
+    try {
+      const { transcribeWithLocalWhisper } = await import('./services/localWhisper');
+      const result = await transcribeWithLocalWhisper(activeLecture.audioBlob, (progress) => {
+        if (progress.status === 'progress' && progress.progress) {
+          setLocalWhisperProgress(`Downloading AI Model: ${Math.round(progress.progress)}%`);
+        } else if (progress.status === 'ready') {
+          setLocalWhisperProgress("Transcribing audio directly in your browser...");
+        }
+      });
+
+      if (result && result.words && result.words.length > 0) {
+        await handleBatchWordsUpdate(result.words);
+        setQuickTranscribeModalOpen(false);
+      } else {
+        alert("Local AI finished but detected no audible speech in audio.");
+      }
+    } catch (err) {
+      console.error("Local Whisper error:", err);
+      alert(`Local AI notice: ${err.message}. You can also use Free Groq key for 1-second cloud speed!`);
+    } finally {
+      setLocalWhisperLoading(false);
+      setLocalWhisperProgress(null);
     }
   };
 
@@ -847,7 +884,7 @@ export default function App() {
       {/* Quick API Key / Instant Whisper Transcription Modal */}
       {quickTranscribeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
-          <div className="relative w-full max-w-md bg-slate-900 border border-indigo-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col space-y-4">
+          <div className="relative w-full max-w-lg bg-slate-900 border border-indigo-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col space-y-4 max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setQuickTranscribeModalOpen(false)}
               className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white"
@@ -860,52 +897,87 @@ export default function App() {
                 <Sparkles className="w-6 h-6 text-indigo-400" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Transcribe Note with AI</h3>
-                <p className="text-xs text-slate-400">Whisper Large v3 • 100% Free</p>
+                <h3 className="text-base font-bold text-white">Transcribe "{activeLecture?.title}"</h3>
+                <p className="text-xs text-slate-400">Convert recorded audio into word-by-word interactive text</p>
               </div>
             </div>
 
-            <div className="p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs text-slate-300 space-y-2">
-              <p>
-                <strong>Is an API key needed?</strong> Yes for Cloud Whisper AI, but it is <strong>100% FREE</strong> with 0 cost and no credit card required.
+            {/* Option A: Zero-Key In-Browser AI */}
+            <div className="p-4 bg-gradient-to-r from-emerald-950/60 to-slate-950 border border-emerald-800/60 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Option 1: 100% Free In-Browser AI (Zero Keys)
+                </span>
+                <span className="text-[10px] bg-emerald-900/60 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
+                  No API Key
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                Runs speech-to-text directly inside your browser using Whisper WebAssembly. 100% free, private, and requires zero setup.
+              </p>
+              <button
+                onClick={handleRunLocalWhisper}
+                disabled={localWhisperLoading}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {localWhisperLoading ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>{localWhisperProgress || "Transcribing in browser..."}</span>
+                  </>
+                ) : (
+                  <span>⚡ Run Free In-Browser AI (Zero Keys)</span>
+                )}
+              </button>
+            </div>
+
+            {/* Option B: Ultra-Fast Cloud Whisper Large v3 */}
+            <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                  Option 2: Ultra-Fast Cloud Whisper (Groq)
+                </span>
+                <span className="text-[10px] bg-indigo-900/60 text-indigo-300 px-2 py-0.5 rounded-full font-mono">
+                  0.8s Speed
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Transcribes long audio in ~1 second with Whisper Large v3. Groq provides this for <strong>100% FREE</strong> with 0 credit card.
               </p>
               <a
                 href="https://console.groq.com/keys"
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 font-semibold underline"
+                className="inline-flex items-center gap-1.5 text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold underline"
               >
-                <span>🔑 Click here to get a Free Groq API Key (Takes 10s)</span>
+                <span>🔑 Click here to get a Free Groq Key (Takes 10s with Google login)</span>
               </a>
+
+              <div className="space-y-1.5">
+                <input
+                  type="password"
+                  value={quickApiKeyInput}
+                  onChange={(e) => setQuickApiKeyInput(e.target.value)}
+                  placeholder="Paste free Groq key (starts with gsk_...)"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  onClick={handleQuickSaveKeyAndTranscribe}
+                  disabled={!quickApiKeyInput.trim() || isTranscribingLecture}
+                  className="w-full py-2 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isTranscribingLecture ? "Cloud AI Transcribing..." : "Save Key & Transcribe Instantly"}
+                </button>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Paste Groq API Key (starts with <code className="text-indigo-300">gsk_...</code>):
-              </label>
-              <input
-                type="password"
-                value={quickApiKeyInput}
-                onChange={(e) => setQuickApiKeyInput(e.target.value)}
-                placeholder="gsk_..."
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
-                autoFocus
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end">
               <button
                 onClick={() => setQuickTranscribeModalOpen(false)}
-                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleQuickSaveKeyAndTranscribe}
-                disabled={!quickApiKeyInput.trim()}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 disabled:opacity-50"
-              >
-                Save & Transcribe Now
+                Close
               </button>
             </div>
           </div>

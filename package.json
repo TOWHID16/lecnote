@@ -10,6 +10,7 @@
     "test:e2e": "node test-e2e.mjs"
   },
   "dependencies": {
+    "@xenova/transformers": "^2.17.2",
     "canvas-confetti": "^1.9.3",
     "idb": "^8.0.0",
     "jspdf": "^2.5.2",
