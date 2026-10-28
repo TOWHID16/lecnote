@@ -50,30 +50,30 @@ Generated via: ${summary.generatedBy || activeEngineName}
   return (
     <div className="flex flex-col h-full bg-slate-900/60 backdrop-blur-sm border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 bg-slate-900/90 border-b border-slate-800">
-        <div className="flex items-center gap-2">
-          <BookOpen className="w-5 h-5 text-indigo-400" />
-          <h3 className="font-semibold text-slate-100 text-sm">Summary & Smart Key Notes</h3>
-          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800/80 flex items-center gap-1">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 p-3.5 sm:px-5 sm:py-4 bg-slate-900/90 border-b border-slate-800">
+        <div className="flex items-center gap-2 flex-wrap">
+          <BookOpen className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-400 flex-shrink-0" />
+          <h3 className="font-semibold text-slate-100 text-xs sm:text-sm">Summary & Smart Notes</h3>
+          <span className="text-[10px] sm:text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800/80 flex items-center gap-1">
             {cloudConfigured ? <Cloud className="w-3 h-3 text-sky-400" /> : <Cpu className="w-3 h-3 text-emerald-400" />}
-            <span>{summary?.generatedBy || activeEngineName}</span>
+            <span className="truncate max-w-[160px] sm:max-w-none">{summary?.generatedBy || activeEngineName}</span>
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors border border-slate-700"
             title="Copy formatted summary to clipboard"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copied ? 'Copied!' : 'Copy Notes'}</span>
+            <span>{copied ? 'Copied!' : 'Copy'}</span>
           </button>
 
           <button
             onClick={handleRegenerateClick}
             disabled={isGenerating || words.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/30 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
             <span>{isGenerating ? 'Analyzing...' : 'Regenerate'}</span>
@@ -82,7 +82,7 @@ Generated via: ${summary.generatedBy || activeEngineName}
       </div>
 
       {/* Content Body */}
-      <div className="flex-1 p-6 overflow-y-auto space-y-6">
+      <div className="flex-1 p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6">
         {!summary ? (
           <div className="text-center py-12 text-slate-500 space-y-3">
             <Sparkles className="w-10 h-10 mx-auto text-indigo-400 stroke-1" />

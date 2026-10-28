@@ -276,44 +276,44 @@ export default function ExportModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+          className="absolute top-4 sm:top-5 right-4 sm:right-5 p-2 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
-        <div className="flex items-center gap-3 mb-5">
-          <div className="p-3 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
-            <Share2 className="w-6 h-6 text-indigo-400" />
+        <div className="flex items-center gap-2.5 sm:gap-3 mb-4 sm:mb-5">
+          <div className="p-2.5 sm:p-3 rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex-shrink-0">
+            <Share2 className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-400" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">Share & Export Lecture Note</h2>
-            <p className="text-xs text-slate-400">Offline-friendly portable bundles, audio, and documents</p>
+            <h2 className="text-base sm:text-lg font-bold text-white">Share & Export Note</h2>
+            <p className="text-[11px] sm:text-xs text-slate-400">Offline-friendly portable bundles, audio, and documents</p>
           </div>
         </div>
 
         {/* 1. Web Share API */}
-        <div className="p-4 bg-indigo-950/40 border border-indigo-800/60 rounded-2xl mb-4 flex items-center justify-between">
-          <div>
-            <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-              <Share2 className="w-4 h-4 text-indigo-400" />
-              One-Click Mobile & Web Share
+        <div className="p-3 sm:p-4 bg-indigo-950/40 border border-indigo-800/60 rounded-xl sm:rounded-2xl mb-3 sm:mb-4 flex items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <h4 className="text-xs sm:text-sm font-semibold text-white flex items-center gap-1.5 sm:gap-2">
+              <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 flex-shrink-0" />
+              <span>One-Click Share</span>
             </h4>
-            <p className="text-xs text-slate-300 mt-0.5">Share audio file and note directly to WhatsApp, Drive, or AirDrop</p>
+            <p className="text-[11px] text-slate-300 mt-0.5 truncate">Share audio and note directly</p>
           </div>
           <button
             onClick={handleNativeShare}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow transition-all flex items-center gap-1.5"
+            className="px-3.5 sm:px-4 py-1.5 sm:py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow transition-all flex items-center gap-1.5 flex-shrink-0"
           >
             <span>Share</span>
           </button>
         </div>
 
         {/* 2. Export Formats Grid */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 mb-4">
           {/* Portable .lecnote.json */}
           <button
             onClick={handleExportBundle}

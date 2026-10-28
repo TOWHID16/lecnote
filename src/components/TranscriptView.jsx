@@ -27,11 +27,23 @@ export default function TranscriptView({
     }
   }, [editingWordId]);
 
+  const handleWordAction = (wordObj, e) => {
+    if (editingWordId) return;
+
+    if (highlightMode) {
+      e?.preventDefault?.();
+      toggleWordHighlight(wordObj);
+    } else {
+      // Tap to seek
+      onWordClick?.(wordObj);
+    }
+  };
+
   const handleWordMouseDown = (wordObj, e) => {
     if (editingWordId) return;
 
     if (highlightMode) {
-      e.preventDefault();
+      e?.preventDefault?.();
       setIsDragging(true);
       toggleWordHighlight(wordObj);
     } else {
@@ -55,7 +67,15 @@ export default function TranscriptView({
     return () => window.removeEventListener('mouseup', handleMouseUp);
   }, []);
 
+  const lastToggledRef = useRef({ id: null, time: 0 });
+
   const toggleWordHighlight = (wordObj) => {
+    const now = Date.now();
+    if (lastToggledRef.current.id === wordObj.id && now - lastToggledRef.current.time < 350) {
+      return; // prevent duplicate trigger between mousedown and click
+    }
+    lastToggledRef.current = { id: wordObj.id, time: now };
+
     const nextHighlighted = !wordObj.isHighlighted;
     const updated = {
       ...wordObj,
@@ -109,9 +129,9 @@ export default function TranscriptView({
   return (
     <div className="flex flex-col h-full bg-slate-900/60 backdrop-blur-sm border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
       {/* Top Interactive Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-900/90 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 px-3 sm:px-4 py-2.5 sm:py-3 bg-slate-900/90 border-b border-slate-800">
         {/* Left: Mode toggles */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between sm:justify-start gap-2">
           {/* Highlighter Toggle */}
           <button
             onClick={() => setHighlightMode(!highlightMode)}
@@ -145,18 +165,23 @@ export default function TranscriptView({
               />
             </div>
           )}
+
+          {/* Mobile word count counter */}
+          <span className="sm:hidden text-[11px] text-slate-400 font-mono bg-slate-800 px-2 py-1 rounded">
+            {words.length}w {highlightedCount > 0 ? `• ★${highlightedCount}` : ''}
+          </span>
         </div>
 
         {/* Right: Search & Stats */}
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="relative flex-1 sm:flex-initial">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search words..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-slate-800/80 border border-slate-700 text-xs rounded-lg pl-8 pr-3 py-1.5 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-36 sm:w-44"
+              className="w-full sm:w-44 bg-slate-800/80 border border-slate-700 text-xs rounded-lg pl-8 pr-3 py-1.5 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
             />
             {searchQuery && (
               <button
@@ -182,17 +207,17 @@ export default function TranscriptView({
       </div>
 
       {/* Interactive Guidance Banner */}
-      <div className="bg-indigo-950/30 border-b border-indigo-900/40 px-4 py-2 flex items-center justify-between text-[11px] text-indigo-300">
+      <div className="bg-indigo-950/30 border-b border-indigo-900/40 px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-[11px] text-indigo-300">
         <div className="flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-          <span>
-            💡 <strong>Tap any word</strong> to seek & play audio • <strong>Double-click</strong> to edit spelling • <strong>Highlighter</strong> captures key points for AI summary
+          <span className="leading-snug">
+            💡 <strong>Tap word</strong> to seek audio • <strong>Double-tap</strong> to edit spelling • <strong>Highlighter</strong> captures key points
           </span>
         </div>
       </div>
 
       {/* Main Words Area */}
-      <div className="flex-1 p-6 overflow-y-auto font-sans leading-relaxed text-base select-text">
+      <div className="flex-1 p-3.5 sm:p-6 overflow-y-auto font-sans leading-relaxed text-sm sm:text-base select-text">
         {words.length === 0 ? (
           <div className="h-64 flex flex-col items-center justify-center text-slate-500 text-center">
             <HelpCircle className="w-10 h-10 mb-2 stroke-1" />
@@ -200,15 +225,15 @@ export default function TranscriptView({
             <p className="text-xs text-slate-600 mt-1">Start recording above or load the sample Banglish lecture to test.</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3.5 sm:space-y-4">
             {paragraphs.map((pWords, pIdx) => {
               const pStartTime = pWords[0]?.startTime || 0;
               return (
-                <div key={`p-${pIdx}`} className="relative group/p flex items-start gap-3">
+                <div key={`p-${pIdx}`} className="relative group/p flex items-start gap-2 sm:gap-3">
                   {/* Paragraph Timestamp Gutter Marker */}
                   <button
                     onClick={() => onWordClick?.(pWords[0])}
-                    className="mt-1 flex-shrink-0 text-[10px] font-mono font-medium text-slate-400 hover:text-indigo-400 bg-slate-800/60 hover:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/60 transition-colors"
+                    className="mt-1 flex-shrink-0 text-[10px] font-mono font-medium text-slate-400 hover:text-indigo-400 bg-slate-800/60 hover:bg-slate-800 px-1 sm:px-1.5 py-0.5 rounded border border-slate-700/60 transition-colors"
                     title={`Jump to ${formatTime(pStartTime)}`}
                   >
                     {formatTime(pStartTime)}
@@ -233,7 +258,7 @@ export default function TranscriptView({
                                 if (e.key === 'Enter') commitEditing(w);
                                 if (e.key === 'Escape') cancelEditing();
                               }}
-                              className="bg-indigo-900 text-white font-medium text-sm px-1.5 py-0.5 rounded border border-indigo-400 focus:outline-none"
+                              className="bg-indigo-900 text-white font-medium text-xs sm:text-sm px-1.5 py-0.5 rounded border border-indigo-400 focus:outline-none w-28 sm:w-auto"
                             />
                             <button
                               onClick={() => commitEditing(w)}
@@ -267,6 +292,7 @@ export default function TranscriptView({
                         <span
                           key={w.id}
                           className={wordClasses}
+                          onClick={(e) => handleWordAction(w, e)}
                           onMouseDown={(e) => handleWordMouseDown(w, e)}
                           onMouseEnter={() => handleWordMouseEnter(w)}
                           onDoubleClick={(e) => startEditing(w, e)}

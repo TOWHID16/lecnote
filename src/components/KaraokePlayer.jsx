@@ -141,7 +141,7 @@ const KaraokePlayer = forwardRef(function KaraokePlayer({
   const progressPercent = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0;
 
   return (
-    <div className="relative bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-4 shadow-xl">
+    <div className="relative bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-xl">
       {/* Hidden native audio element */}
       {audioUrl && (
         <audio
@@ -156,14 +156,14 @@ const KaraokePlayer = forwardRef(function KaraokePlayer({
 
       {/* Floating Seek / Active Word Badge */}
       {seekingBadge && (
-        <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-full shadow-lg border border-indigo-400 animate-bounce">
-          <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
-          <span>Jumped to {seekingBadge}</span>
+        <div className="absolute -top-9 sm:-top-10 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-0.5 sm:py-1 bg-indigo-600 text-white text-[11px] sm:text-xs font-semibold rounded-full shadow-lg border border-indigo-400 animate-bounce max-w-[85vw] truncate">
+          <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-yellow-300 flex-shrink-0" />
+          <span className="truncate">Jumped to {seekingBadge}</span>
         </div>
       )}
 
       {/* Progress Scrubber */}
-      <div className="space-y-1.5 mb-3">
+      <div className="space-y-1 sm:space-y-1.5 mb-2 sm:mb-3">
         <div className="relative flex items-center group">
           <input
             type="range"
@@ -173,7 +173,7 @@ const KaraokePlayer = forwardRef(function KaraokePlayer({
             value={currentTime}
             onChange={handleSeek}
             aria-label="Seek audio playback"
-            className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+            className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400/50 touch-none"
             style={{
               background: `linear-gradient(to right, #6366f1 ${progressPercent}%, #334155 ${progressPercent}%)`
             }}
@@ -181,10 +181,10 @@ const KaraokePlayer = forwardRef(function KaraokePlayer({
         </div>
 
         {/* Timers & Active Karaoke Word Preview */}
-        <div className="flex items-center justify-between text-xs font-mono text-slate-400">
+        <div className="flex items-center justify-between text-[11px] sm:text-xs font-mono text-slate-400">
           <span className="text-indigo-400 font-semibold">{formatTime(currentTime)}</span>
           {activeWord && (
-            <span className="text-slate-300 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700 max-w-[200px] truncate text-center">
+            <span className="text-slate-300 bg-slate-800/80 px-1.5 sm:px-2 py-0.5 rounded border border-slate-700 max-w-[120px] sm:max-w-[200px] truncate text-center">
               Now: <strong className="text-indigo-300">{activeWord.word}</strong>
             </span>
           )}
@@ -193,23 +193,23 @@ const KaraokePlayer = forwardRef(function KaraokePlayer({
       </div>
 
       {/* Control Buttons */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Replay 5s */}
           <button
             onClick={() => handleSkip(-5)}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+            className="p-2 sm:p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
             title="Rewind 5 seconds"
             aria-label="Rewind 5 seconds"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
           {/* Main Play / Pause Button */}
           <button
             onClick={togglePlay}
             disabled={!audioBlob}
-            className={`p-3 rounded-full font-medium transition-all shadow-md ${
+            className={`p-2.5 sm:p-3 rounded-full font-medium transition-all shadow-md ${
               isPlaying
                 ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/25 ring-2 ring-amber-400/40'
                 : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30 ring-2 ring-indigo-400/40'
@@ -218,43 +218,43 @@ const KaraokePlayer = forwardRef(function KaraokePlayer({
             aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
           >
             {isPlaying ? (
-              <Pause className="w-5 h-5 fill-current" />
+              <Pause className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
             ) : (
-              <Play className="w-5 h-5 fill-current ml-0.5" />
+              <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current ml-0.5" />
             )}
           </button>
 
           {/* Forward 5s */}
           <button
             onClick={() => handleSkip(5)}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+            className="p-2 sm:p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
             title="Fast forward 5 seconds"
             aria-label="Fast forward 5 seconds"
           >
-            <RotateCw className="w-4 h-4" />
+            <RotateCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
 
         {/* Speed & Volume Tools */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Speed Toggle */}
           <button
             onClick={cycleSpeed}
-            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 transition-colors flex items-center gap-1"
+            className="px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 transition-colors flex items-center gap-1"
             title="Playback Speed"
           >
-            <FastForward className="w-3.5 h-3.5" />
+            <FastForward className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             <span>{playbackRate}x</span>
           </button>
 
           {/* Mute toggle */}
           <button
             onClick={toggleMute}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+            className="p-2 sm:p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
             title={isMuted ? 'Unmute' : 'Mute'}
             aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
           >
-            {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4" />}
+            {isMuted ? <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
           </button>
         </div>
       </div>

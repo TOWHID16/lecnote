@@ -112,7 +112,7 @@ async function runE2ETests() {
 
     // 8. Test Summary & Key Notes Tab
     console.log("6. Testing Summary & Key Notes generation...");
-    const summaryTabBtn = page.locator('button:has-text("Summary & Key Notes")');
+    const summaryTabBtn = page.locator('button:has-text("Summary")');
     await summaryTabBtn.click();
     await page.waitForSelector('text=Lecture Overview', { timeout: 4000 });
     console.log("✓ Summary tab opened and overview is visible.");
@@ -131,7 +131,7 @@ async function runE2ETests() {
     console.log("7. Testing Share & Export Modal...");
     const exportBtn = page.locator('button:has-text("Export & Share")');
     await exportBtn.click();
-    await page.waitForSelector('text=Share & Export Lecture Note', { timeout: 3000 });
+    await page.waitForSelector('text=Share & Export Note', { timeout: 3000 });
     console.log("✓ Export modal opened.");
 
     const bundleBtn = await page.locator('text=.lecnote.json Bundle').count();
@@ -140,7 +140,7 @@ async function runE2ETests() {
 
     // Close modal
     await page.keyboard.press('Escape');
-    await page.waitForSelector('text=Share & Export Lecture Note', { state: 'hidden', timeout: 3000 });
+    await page.waitForSelector('text=Share & Export Note', { state: 'hidden', timeout: 3000 });
     await page.waitForTimeout(300);
 
     // 10. Test Cloud AI Boost Modal
@@ -162,9 +162,9 @@ async function runE2ETests() {
 
     // 11. Test Live Recording Studio
     console.log("9. Testing Live Recording Studio & Saving to IndexedDB...");
-    const recordBtn = page.locator('button:has-text("Record Lecture")').first();
+    const recordBtn = page.locator('button:has-text("Record")').first();
     await recordBtn.click();
-    await page.waitForSelector('text=Live Lecture Recording Studio', { timeout: 3000 });
+    await page.waitForSelector('text=Live Recording Studio', { timeout: 3000 });
     console.log("✓ Recording Studio opened.");
 
     // Fill title
