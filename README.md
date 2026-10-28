@@ -1,5 +1,7 @@
 # 🎙️ LecNote AI — Voice Lecture Recorder & Interactive Note-Taker
 
+> **Live Production App:** [https://lecnote-app.vercel.app](https://lecnote-app.vercel.app) (also available at [https://lecnote-web.vercel.app](https://lecnote-web.vercel.app))
+
 **LecNote AI** is an offline-first, production-ready Progressive Web App (PWA) designed for students, academics, and researchers. It provides interactive, word-level audio transcription, karaoke playback synchronization, user highlighting, and AI-powered study summaries for **Bangla (বাংলা)**, **English**, and **mixed Banglish** classroom lectures — **100% free of cost with local browser storage (`IndexedDB`)**.
 
 ---
